@@ -2,31 +2,28 @@ name: Build Black for Windows
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "v*"
 
 jobs:
   build:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install MinGW
-        run: |
-          choco install mingw -y
-          gcc --version
-
-      - name: Build Black
+      - name: Build
         shell: bash
         run: |
           mkdir -p build
-          gcc -std=c11 -O2 -Iinclude src/*.c -o build/black.exe
+          make
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Package
+        shell: bash
+        run: |
+          cp "$(find . -type f -name 'black.exe' -o -name 'black' | head -1)" build/black.exe
+          7z a black-windows-x64.zip build/black.exe
+
+      - uses: actions/upload-artifact@v4
         with:
           name: black-windows-x64
-          path: build/black.exe
+          path: black-windows-x64.zip
+          
