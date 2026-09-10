@@ -1,13 +1,10 @@
 # Black
-<<<<<<< HEAD
-Black is a specification-oriented systems programming language and compiler for kernels, operating systems, firmware, bare-metal systems, compilers, and low-level tooling.
-=======
 
-Black is a specification-oriented systems programming language and compiler. Its job is to describe low-level system behavior cleanly, then lower that description into ordinary C11 suitable for a freestanding C toolchain.
+Black is a specification-oriented systems programming language and compiler for kernels, operating systems, firmware, bare-metal systems, compilers, and low-level tooling.
 
 ## Scope
 
-Black targets kernels, operating systems, firmware, boot code, drivers, kernel modules, bare-metal programs, memory managers, MMIO, ABI boundaries, linker-facing declarations, and compiler/toolchain construction. It deliberately does not target web, GUI, or ordinary application development.
+Black targets kernels, operating systems, firmware, boot code, drivers, kernel modules, bare-metal programs, memory managers, MMIO, ABI boundaries, linker-facing declarations, and compiler/toolchain support.
 
 ## Pipeline
 
@@ -41,9 +38,8 @@ System-oriented qualifiers include `const`, `volatile`, `static`, `extern`, `inl
 
 ## Kernel model
 
-`kernel { ... }` marks a program as kernel-oriented metadata. The current C backend emits no libc calls and includes only integer/size definitions. Actual bootstrapping, linker scripts, startup code, page tables, interrupt tables, and architecture assembly belong to the target build description and can be added without changing the core language model.
+`kernel { ... }` marks a program as kernel-oriented metadata. The current C backend emits no libc calls and includes only integer/size definitions. Actual bootstrapping, linker scripts, startup code, and interrupt handlers are outside the Black language scope.
 
 ## Compatibility
 
 The old C12 public API names remain available as aliases/wrappers so existing callers do not immediately break. New code should use the `black_*` API.
->>>>>>> 36a5e66 (Initial Black compiler)

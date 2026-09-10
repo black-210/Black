@@ -1,13 +1,277 @@
 #include "black_internal.h"
 
-BlackType *black_type_new(BlackTypeKind k){BlackType*t=calloc(1,sizeof(*t));if(t)t->kind=k;return t;}
-BlackType *black_type_clone(const BlackType*t){if(!t)return NULL;BlackType*n=black_type_new(t->kind);if(!n)return NULL;n->is_const=t->is_const;n->is_volatile=t->is_volatile;switch(t->kind){case BLACK_TYPE_POINTER:n->as.pointer.base=black_type_clone(t->as.pointer.base);break;case BLACK_TYPE_ARRAY:n->as.array.element=black_type_clone(t->as.array.element);n->as.array.count=t->as.array.count;break;case BLACK_TYPE_STRUCT:case BLACK_TYPE_ENUM:n->as.record.name=t->as.record.name?black_xstrndup(t->as.record.name,strlen(t->as.record.name)):NULL;break;case BLACK_TYPE_FUNCTION:n->as.function.return_type=black_type_clone(t->as.function.return_type);n->as.function.param_count=t->as.function.param_count;n->as.function.params=calloc(n->as.function.param_count,sizeof(BlackType*));for(size_t i=0;i<n->as.function.param_count;i++)n->as.function.params[i]=black_type_clone(t->as.function.params[i]);break;default:break;}return n;}
-void black_type_free(BlackType*t){if(!t)return;switch(t->kind){case BLACK_TYPE_POINTER:black_type_free(t->as.pointer.base);break;case BLACK_TYPE_ARRAY:black_type_free(t->as.array.element);break;case BLACK_TYPE_STRUCT:case BLACK_TYPE_ENUM:free(t->as.record.name);break;case BLACK_TYPE_FUNCTION:for(size_t i=0;i<t->as.function.param_count;i++)black_type_free(t->as.function.params[i]);free(t->as.function.params);black_type_free(t->as.function.return_type);break;default:break;}free(t);}
-int black_type_equal(const BlackType*a,const BlackType*b){if(!a||!b)return 0;if(a->kind!=b->kind)return 0;if(a->kind==BLACK_TYPE_POINTER)return black_type_equal(a->as.pointer.base,b->as.pointer.base);if(a->kind==BLACK_TYPE_ARRAY)return a->as.array.count==b->as.array.count&&black_type_equal(a->as.array.element,b->as.array.element);if(a->kind==BLACK_TYPE_STRUCT||a->kind==BLACK_TYPE_ENUM)return a->as.record.name&&b->as.record.name&&!strcmp(a->as.record.name,b->as.record.name);if(a->kind==BLACK_TYPE_FUNCTION){if(a->as.function.param_count!=b->as.function.param_count||!black_type_equal(a->as.function.return_type,b->as.function.return_type))return 0;for(size_t i=0;i<a->as.function.param_count;i++)if(!black_type_equal(a->as.function.params[i],b->as.function.params[i]))return 0;}return 1;}
-int black_type_is_integer(const BlackType*t){return t&&t->kind>=BLACK_TYPE_U8&&t->kind<=BLACK_TYPE_ISIZE;}
-int black_type_is_signed(const BlackType*t){return t&&(t->kind==BLACK_TYPE_I8||t->kind==BLACK_TYPE_I16||t->kind==BLACK_TYPE_I32||t->kind==BLACK_TYPE_I64||t->kind==BLACK_TYPE_ISIZE);}
-size_t black_type_size(const BlackType*t){if(!t)return 0;switch(t->kind){case BLACK_TYPE_BOOL:case BLACK_TYPE_U8:case BLACK_TYPE_I8:return 1;case BLACK_TYPE_U16:case BLACK_TYPE_I16:return 2;case BLACK_TYPE_U32:case BLACK_TYPE_I32:return 4;case BLACK_TYPE_U64:case BLACK_TYPE_I64:return 8;case BLACK_TYPE_POINTER:case BLACK_TYPE_USIZE:case BLACK_TYPE_ISIZE:return sizeof(void*);case BLACK_TYPE_ARRAY:return black_type_size(t->as.array.element)*t->as.array.count;default:return 0;}}
-void black_expr_free(BlackExpr*e){if(!e)return;switch(e->kind){case BLACK_EXPR_STRING:case BLACK_EXPR_NAME:free(e->as.string);break;case BLACK_EXPR_UNARY:black_expr_free(e->as.unary.value);break;case BLACK_EXPR_BINARY:black_expr_free(e->as.binary.left);black_expr_free(e->as.binary.right);break;case BLACK_EXPR_ASSIGN:black_expr_free(e->as.assign.left);black_expr_free(e->as.assign.right);break;case BLACK_EXPR_CALL:black_expr_free(e->as.call.callee);for(size_t i=0;i<e->as.call.arg_count;i++)black_expr_free(e->as.call.args[i]);free(e->as.call.args);break;case BLACK_EXPR_INDEX:black_expr_free(e->as.index.base);black_expr_free(e->as.index.index);break;case BLACK_EXPR_MEMBER:black_expr_free(e->as.member.base);free(e->as.member.member);break;case BLACK_EXPR_CAST:black_expr_free(e->as.cast.value);black_type_free(e->as.cast.type);break;default:break;}free(e);}
-void black_stmt_free(BlackStmt*s){if(!s)return;switch(s->kind){case BLACK_ST_BLOCK:for(size_t i=0;i<s->as.block.count;i++)black_stmt_free(s->as.block.items[i]);free(s->as.block.items);break;case BLACK_ST_LET:free(s->as.let.name);black_type_free(s->as.let.type);black_expr_free(s->as.let.initializer);break;case BLACK_ST_EXPR:black_expr_free(s->as.expr.expr);break;case BLACK_ST_RETURN:black_expr_free(s->as.ret.expr);break;case BLACK_ST_IF:black_expr_free(s->as.if_stmt.condition);black_stmt_free(s->as.if_stmt.then_branch);black_stmt_free(s->as.if_stmt.else_branch);break;case BLACK_ST_WHILE:black_expr_free(s->as.while_stmt.condition);black_stmt_free(s->as.while_stmt.body);break;case BLACK_ST_ASM:free(s->as.asm_stmt.text);break;}free(s);}
-void black_decl_free(BlackDecl*d){if(!d)return;free(d->name);switch(d->kind){case BLACK_DECL_FUNCTION:for(size_t i=0;i<d->as.function.param_count;i++){free(d->as.function.params[i].name);black_type_free(d->as.function.params[i].type);}free(d->as.function.params);black_type_free(d->as.function.return_type);black_stmt_free(d->as.function.body);free(d->as.function.section);free(d->as.function.abi);free(d->as.function.interrupt_arch);break;case BLACK_DECL_STRUCT:for(size_t i=0;i<d->as.structure.field_count;i++){free(d->as.structure.fields[i].name);black_type_free(d->as.structure.fields[i].type);}free(d->as.structure.fields);break;case BLACK_DECL_ENUM:for(size_t i=0;i<d->as.enumeration.value_count;i++){free(d->as.enumeration.values[i].name);black_type_free(d->as.enumeration.values[i].underlying);}free(d->as.enumeration.values);break;case BLACK_DECL_EXTERN_VAR:black_type_free(d->as.extern_var.type);free(d->as.extern_var.section);break;case BLACK_DECL_SPEC:free(d->as.spec.text);break;}free(d);}
-void black_free_program(BlackProgram*p){if(!p)return;for(size_t i=0;i<p->count;i++)black_decl_free(p->decls[i]);free(p->decls);free(p->target);free(p->abi);free(p);}
+BlackType *black_type_new(BlackTypeKind k)
+{
+    BlackType *t = calloc(1, sizeof(*t));
+    if (t)
+        t->kind = k;
+    return t;
+}
+
+BlackType *black_type_clone(const BlackType *t)
+{
+    if (!t)
+        return NULL;
+    
+    BlackType *n = black_type_new(t->kind);
+    if (!n)
+        return NULL;
+    
+    n->is_const = t->is_const;
+    n->is_volatile = t->is_volatile;
+    
+    switch (t->kind) {
+    case BLACK_TYPE_POINTER:
+        n->as.pointer.base = black_type_clone(t->as.pointer.base);
+        break;
+    case BLACK_TYPE_ARRAY:
+        n->as.array.element = black_type_clone(t->as.array.element);
+        n->as.array.count = t->as.array.count;
+        break;
+    case BLACK_TYPE_STRUCT:
+        n->as.record.name = t->as.record.name ? strdup(t->as.record.name) : NULL;
+        break;
+    case BLACK_TYPE_FUNCTION:
+        n->as.function.return_type = black_type_clone(t->as.function.return_type);
+        n->as.function.param_count = t->as.function.param_count;
+        if (t->as.function.params) {
+            n->as.function.params = malloc(t->as.function.param_count * sizeof(BlackType *));
+            for (size_t i = 0; i < t->as.function.param_count; i++)
+                n->as.function.params[i] = black_type_clone(t->as.function.params[i]);
+        }
+        break;
+    default:
+        break;
+    }
+    
+    return n;
+}
+
+void black_type_free(BlackType *t)
+{
+    if (!t)
+        return;
+    
+    switch (t->kind) {
+    case BLACK_TYPE_POINTER:
+        black_type_free(t->as.pointer.base);
+        break;
+    case BLACK_TYPE_ARRAY:
+        black_type_free(t->as.array.element);
+        break;
+    case BLACK_TYPE_STRUCT:
+        free(t->as.record.name);
+        for (size_t i = 0; i < t->as.record.field_count; i++)
+            black_type_free(t->as.record.fields[i].type);
+        free(t->as.record.fields);
+        break;
+    case BLACK_TYPE_FUNCTION:
+        black_type_free(t->as.function.return_type);
+        for (size_t i = 0; i < t->as.function.param_count; i++)
+            black_type_free(t->as.function.params[i]);
+        free(t->as.function.params);
+        break;
+    default:
+        break;
+    }
+    
+    free(t);
+}
+
+int black_type_equal(const BlackType *a, const BlackType *b)
+{
+    if (!a || !b)
+        return 0;
+    if (a->kind != b->kind)
+        return 0;
+    
+    if (a->kind == BLACK_TYPE_POINTER)
+        return black_type_equal(a->as.pointer.base, b->as.pointer.base);
+    if (a->kind == BLACK_TYPE_ARRAY)
+        return a->as.array.count == b->as.array.count &&
+               black_type_equal(a->as.array.element, b->as.array.element);
+    
+    return 1;
+}
+
+int black_type_is_integer(const BlackType *t)
+{
+    return t && t->kind >= BLACK_TYPE_U8 && t->kind <= BLACK_TYPE_ISIZE;
+}
+
+int black_type_is_signed(const BlackType *t)
+{
+    return t && (t->kind == BLACK_TYPE_I8 || t->kind == BLACK_TYPE_I16 ||
+                 t->kind == BLACK_TYPE_I32 || t->kind == BLACK_TYPE_I64 ||
+                 t->kind == BLACK_TYPE_ISIZE);
+}
+
+size_t black_type_size(const BlackType *t)
+{
+    if (!t)
+        return 0;
+    
+    switch (t->kind) {
+    case BLACK_TYPE_BOOL:
+    case BLACK_TYPE_U8:
+    case BLACK_TYPE_I8:
+        return 1;
+    case BLACK_TYPE_U16:
+    case BLACK_TYPE_I16:
+        return 2;
+    case BLACK_TYPE_U32:
+    case BLACK_TYPE_I32:
+        return 4;
+    case BLACK_TYPE_U64:
+    case BLACK_TYPE_I64:
+    case BLACK_TYPE_USIZE:
+    case BLACK_TYPE_ISIZE:
+    case BLACK_TYPE_POINTER:
+        return 8;
+    default:
+        return 0;
+    }
+}
+
+void black_expr_free(BlackExpr *e)
+{
+    if (!e)
+        return;
+    
+    switch (e->kind) {
+    case BLACK_EXPR_STRING:
+    case BLACK_EXPR_NAME:
+        free(e->as.string);
+        break;
+    case BLACK_EXPR_UNARY:
+        black_expr_free(e->as.unary.value);
+        break;
+    case BLACK_EXPR_BINARY:
+        black_expr_free(e->as.binary.left);
+        black_expr_free(e->as.binary.right);
+        break;
+    case BLACK_EXPR_ASSIGN:
+        black_expr_free(e->as.assign.left);
+        black_expr_free(e->as.assign.right);
+        break;
+    case BLACK_EXPR_CALL:
+        black_expr_free(e->as.call.callee);
+        for (size_t i = 0; i < e->as.call.arg_count; i++)
+            black_expr_free(e->as.call.args[i]);
+        free(e->as.call.args);
+        break;
+    case BLACK_EXPR_INDEX:
+        black_expr_free(e->as.index.base);
+        black_expr_free(e->as.index.index);
+        break;
+    case BLACK_EXPR_MEMBER:
+        black_expr_free(e->as.member.base);
+        free(e->as.member.member);
+        break;
+    case BLACK_EXPR_CAST:
+        black_type_free(e->as.cast.type);
+        black_expr_free(e->as.cast.value);
+        break;
+    default:
+        break;
+    }
+    
+    free(e);
+}
+
+void black_stmt_free(BlackStmt *s)
+{
+    if (!s)
+        return;
+    
+    switch (s->kind) {
+    case BLACK_ST_BLOCK:
+        for (size_t i = 0; i < s->as.block.count; i++)
+            black_stmt_free(s->as.block.items[i]);
+        free(s->as.block.items);
+        break;
+    case BLACK_ST_LET:
+        free(s->as.let.name);
+        black_type_free(s->as.let.type);
+        black_expr_free(s->as.let.initializer);
+        break;
+    case BLACK_ST_EXPR:
+        black_expr_free(s->as.expr.expr);
+        break;
+    case BLACK_ST_RETURN:
+        black_expr_free(s->as.ret.expr);
+        break;
+    case BLACK_ST_IF:
+        black_expr_free(s->as.if_stmt.condition);
+        black_stmt_free(s->as.if_stmt.then_branch);
+        black_stmt_free(s->as.if_stmt.else_branch);
+        break;
+    case BLACK_ST_WHILE:
+        black_expr_free(s->as.while_stmt.condition);
+        black_stmt_free(s->as.while_stmt.body);
+        break;
+    case BLACK_ST_ASM:
+        free(s->as.asm_stmt.text);
+        break;
+    }
+    
+    free(s);
+}
+
+void black_decl_free(BlackDecl *d)
+{
+    if (!d)
+        return;
+    
+    free(d->name);
+    
+    switch (d->kind) {
+    case BLACK_DECL_FUNCTION:
+        for (size_t i = 0; i < d->as.function.param_count; i++) {
+            free(d->as.function.params[i].name);
+            black_type_free(d->as.function.params[i].type);
+        }
+        free(d->as.function.params);
+        black_type_free(d->as.function.return_type);
+        black_stmt_free(d->as.function.body);
+        free(d->as.function.section);
+        free(d->as.function.abi);
+        free(d->as.function.interrupt_arch);
+        break;
+    case BLACK_DECL_STRUCT:
+        for (size_t i = 0; i < d->as.structure.field_count; i++) {
+            free(d->as.structure.fields[i].name);
+            black_type_free(d->as.structure.fields[i].type);
+        }
+        free(d->as.structure.fields);
+        break;
+    case BLACK_DECL_ENUM:
+        for (size_t i = 0; i < d->as.enumeration.value_count; i++)
+            free(d->as.enumeration.values[i].name);
+        free(d->as.enumeration.values);
+        break;
+    case BLACK_DECL_EXTERN_VAR:
+        black_type_free(d->as.extern_var.type);
+        free(d->as.extern_var.section);
+        break;
+    case BLACK_DECL_SPEC:
+        free(d->as.spec.text);
+        break;
+    }
+    
+    free(d);
+}
+
+void black_free_program(BlackProgram *p)
+{
+    if (!p)
+        return;
+    
+    for (size_t i = 0; i < p->count; i++)
+        black_decl_free(p->decls[i]);
+    
+    free(p->decls);
+    free(p->target);
+    free(p->abi);
+    free(p);
+}
