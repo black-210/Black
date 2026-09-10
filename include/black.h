@@ -292,16 +292,8 @@ int black_compile_file_to_file(const char *input_path, const char *output_path);
 const char *black_token_name(BlackTokenKind kind);
 const char *black_type_name(const BlackType *type);
 void black_error_print(const BlackError *error, FILE *stream);
-void
+
 #ifdef __cplusplus
 }
 #endif
 #endif
-typedef struct {
-    BlackDecl **decls;
-    size_t count;
-    size_t capacity;
-    int is_kernel;
-    char *target;
-    char *abi;
-} BlackProgram;
