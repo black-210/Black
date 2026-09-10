@@ -1,0 +1,10 @@
+/* A minimal kernel-shaped specification. No libc, VM, or runtime is required. */
+target("x86_64");
+abi("sysv");
+
+kernel {
+    fn main() {
+        let video: *u8 = 0xB8000;
+        *video = 65;
+    }
+}

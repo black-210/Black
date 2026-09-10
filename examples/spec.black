@@ -1,0 +1,24 @@
+/* Black is intentionally declarative in shape: the source describes the system. */
+target("x86_64");
+abi("sysv");
+
+struct CpuState {
+    rip: u64;
+    rsp: u64;
+    flags: u64;
+};
+
+extern fn panic(code: u32);
+
+kernel {
+    fn add(a: u32, b: u32) -> u32 {
+        return a + b;
+    }
+
+    fn main() {
+        let x: u32 = add(40, 2);
+        let p: *u32 = 0x1000;
+        *p = x;
+        return;
+    }
+}
